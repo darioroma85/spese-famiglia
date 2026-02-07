@@ -34,7 +34,7 @@ with st.expander("➕ Aggiungi Nuova Spesa"):
     
     if st.button("Salva Spesa"):
         nuova_riga = pd.DataFrame({
-            'Data': [data.strftime('%Y-%m-%d')], 
+            'Data': [data.strftime('%d-%m-%Y')], # Forza il formato Giorno-Mese-Anno
             'Categoria': [cat], 
             'Descrizione': [desc], 
             'Importo': [float(prezzo)]
@@ -47,9 +47,10 @@ with st.expander("➕ Aggiungi Nuova Spesa"):
 # --- FILTRO PER MESE IN ITALIANO ---
 st.divider()
 if not df.empty:
-    df['Data'] = pd.to_datetime(df['Data'])
+    # Specifichiamo che il GIORNO viene prima del mese
+    df['Data'] = pd.to_datetime(df['Data'], dayfirst=True, errors='coerce')
+    df = df.dropna(subset=['Data'])
     
-    # Creiamo il nome del mese in inglese e lo traduciamo
     df['Mese_Eng'] = df['Data'].dt.strftime('%B')
     df['Anno'] = df['Data'].dt.strftime('%Y')
     df['Mese_Ita'] = df['Mese_Eng'].map(MESI_TRADUZIONE) + " " + df['Anno']
