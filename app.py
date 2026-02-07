@@ -32,16 +32,22 @@ with st.expander("➕ Aggiungi Nuova Spesa"):
     desc = st.text_input("Descrizione")
     prezzo = st.number_input("Importo (€)", min_value=0.0, step=0.01)
     
-    if st.button("Salva Spesa"):
+   if st.button("Salva Spesa"):
+        # Questa riga qui sotto è quella fondamentale:
+        # data.strftime('%d/%m/%Y') trasforma qualsiasi data selezionata
+        # nel formato europeo standard 07/02/2026
+        data_formattata = data.strftime('%d/%m/%Y')
+        
         nuova_riga = pd.DataFrame({
-            'Data': [data.strftime('%d-%m-%Y')], # Forza il formato Giorno-Mese-Anno
+            'Data': [data_formattata], 
             'Categoria': [cat], 
             'Descrizione': [desc], 
             'Importo': [float(prezzo)]
         })
+        
         df_aggiornato = pd.concat([df, nuova_riga], ignore_index=True)
         conn.update(spreadsheet=st.secrets["connections"]["gsheets"]["spreadsheet"], data=df_aggiornato)
-        st.success("Spesa salvata!")
+        st.success(f"Spesa salvata correttamente con data {data_formattata}!")
         st.rerun()
 
 # --- FILTRO PER MESE IN ITALIANO ---
