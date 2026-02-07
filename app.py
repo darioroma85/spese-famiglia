@@ -32,7 +32,7 @@ with st.expander("➕ Aggiungi Nuova Spesa"):
     desc = st.text_input("Descrizione")
     prezzo = st.number_input("Importo (€)", min_value=0.0, step=0.01)
     
-   if st.button("Salva Spesa"):
+if st.button("Salva Spesa"):
         # Questa riga qui sotto è quella fondamentale:
         # data.strftime('%d/%m/%Y') trasforma qualsiasi data selezionata
         # nel formato europeo standard 07/02/2026
