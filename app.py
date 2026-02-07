@@ -1,18 +1,23 @@
 import streamlit as st
+from streamlit_gsheets import GSheetsConnection
 import pandas as pd
-import os
-
-NOME_FILE = 'spese_famiglia.xlsx'
 
 st.set_page_config(page_title="Casa Mesagne - Spese", layout="centered")
 
-# --- CARICAMENTO DATI ---
-if os.path.exists(NOME_FILE):
-    df = pd.read_excel(NOME_FILE)
-    # Assicuriamoci che la colonna Data sia in formato data vero
-    df['Data'] = pd.to_datetime(df['Data'])
-else:
-    df = pd.DataFrame(columns=['Data', 'Categoria', 'Descrizione', 'Importo'])
+# Dizionario per tradurre i mesi
+MESI_TRADUZIONE = {
+    "January": "Gennaio", "February": "Febbraio", "March": "Marzo",
+    "April": "Aprile", "May": "Maggio", "June": "Giugno",
+    "July": "Luglio", "August": "Agosto", "September": "Settembre",
+    "October": "Ottobre", "November": "Novembre", "December": "Dicembre"
+}
+
+# Connessione a Google Sheets
+conn = st.connection("gsheets", type=GSheetsConnection)
+
+# Lettura dati
+df = conn.read(ttl=0)
+df = df.dropna(how='all')
 
 st.title("📊 Gestione Spese Famiglia")
 
@@ -28,26 +33,35 @@ with st.expander("➕ Aggiungi Nuova Spesa"):
     prezzo = st.number_input("Importo (€)", min_value=0.0, step=0.01)
     
     if st.button("Salva Spesa"):
-        nuova_riga = pd.DataFrame({'Data': [pd.to_datetime(data)], 'Categoria': [cat], 'Descrizione': [desc], 'Importo': [prezzo]})
-        df = pd.concat([df, nuova_riga], ignore_index=True)
-        df.to_excel(NOME_FILE, index=False)
+        nuova_riga = pd.DataFrame({
+            'Data': [data.strftime('%Y-%m-%d')], 
+            'Categoria': [cat], 
+            'Descrizione': [desc], 
+            'Importo': [float(prezzo)]
+        })
+        df_aggiornato = pd.concat([df, nuova_riga], ignore_index=True)
+        conn.update(spreadsheet=st.secrets["connections"]["gsheets"]["spreadsheet"], data=df_aggiornato)
         st.success("Spesa salvata!")
         st.rerun()
 
-# --- FILTRO PER MESE ---
+# --- FILTRO PER MESE IN ITALIANO ---
 st.divider()
 if not df.empty:
-    # Creiamo una colonna Mese-Anno per il menu a tendina
-    df['Mese_Anno'] = df['Data'].dt.strftime('%B %Y')
-    elenco_mesi = df['Mese_Anno'].unique()
+    df['Data'] = pd.to_datetime(df['Data'])
     
-    mese_scelto = st.selectbox("Seleziona il mese da visualizzare:", elenco_mesi)
+    # Creiamo il nome del mese in inglese e lo traduciamo
+    df['Mese_Eng'] = df['Data'].dt.strftime('%B')
+    df['Anno'] = df['Data'].dt.strftime('%Y')
+    df['Mese_Ita'] = df['Mese_Eng'].map(MESI_TRADUZIONE) + " " + df['Anno']
     
-    # Filtriamo il database in base alla scelta
-    df_filtrato = df[df['Mese_Anno'] == mese_scelto]
+    # Ordiniamo le opzioni per data decrescente (il mese più recente in alto)
+    elenco_mesi = df.sort_values(by='Data', ascending=False)['Mese_Ita'].unique()
     
-    st.subheader(f"Resoconto di {mese_scelto}")
-    st.metric("Totale Mese", f"€ {df_filtrato['Importo'].sum():.2f}")
+    mese_scelto = st.selectbox("Seleziona il mese:", elenco_mesi)
+    
+    df_filtrato = df[df['Mese_Ita'] == mese_scelto]
+    
+    st.metric(f"Totale {mese_scelto}", f"€ {df_filtrato['Importo'].sum():.2f}")
 
     tab1, tab2, tab3 = st.tabs(["Elenco", "Grafico", "Gestione"])
 
@@ -55,26 +69,19 @@ if not df.empty:
         st.dataframe(df_filtrato[['Data', 'Categoria', 'Descrizione', 'Importo']], use_container_width=True)
 
     with tab2:
-        st.bar_chart(df_filtrato.groupby('Categoria')['Importo'].sum())
+        # Grafico a barre per categoria
+        spese_per_cat = df_filtrato.groupby('Categoria')['Importo'].sum()
+        st.bar_chart(spese_per_cat)
 
     with tab3:
-        st.write("Cancellazione voci:")
-        # Permette di scegliere quale spesa eliminare (mostra descrizione e importo)
-        indice_da_eliminare = st.selectbox("Quale spesa vuoi eliminare?", 
-                                          options=df_filtrato.index,
-                                          format_func=lambda x: f"{df.loc[x, 'Descrizione']} (€{df.loc[x, 'Importo']})")
+        st.write("Cancellazione:")
+        indice = st.selectbox("Quale voce eliminare?", options=df_filtrato.index,
+                              format_func=lambda x: f"{df.loc[x, 'Descrizione']} (€{df.loc[x, 'Importo']})")
         
-        if st.button("Elimina Voce Selezionata"):
-            df = df.drop(indice_da_eliminare)
-            df.to_excel(NOME_FILE, index=False)
+        if st.button("Elimina voce selezionata"):
+            df_residuo = df.drop(indice)
+            conn.update(spreadsheet=st.secrets["connections"]["gsheets"]["spreadsheet"], data=df_residuo)
             st.warning("Voce eliminata!")
             st.rerun()
-
-        st.divider()
-        if st.button("🗑️ CANCELLA INTERA LISTA"):
-            if st.checkbox("Confermo di voler cancellare TUTTI i dati"):
-                os.remove(NOME_FILE)
-                st.error("Dati resettati!")
-                st.rerun()
 else:
-    st.info("Nessuna spesa registrata.")
+    st.info("Inizia aggiungendo la prima spesa!")
