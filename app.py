@@ -1,6 +1,7 @@
 import streamlit as st
 from streamlit_gsheets import GSheetsConnection
 import pandas as pd
+import plotly.express as px # Importiamo Plotly qui
 
 st.set_page_config(page_title="Casa Mesagne - Spese", layout="centered")
 
@@ -32,7 +33,6 @@ with st.expander("➕ Aggiungi Nuova Spesa"):
     desc = st.text_input("Descrizione")
     prezzo = st.number_input("Importo (€)", min_value=0.0, step=0.01)
     
-    # Il bottone deve stare DENTRO o subito dopo i campi di input, con l'allineamento corretto
     if st.button("Salva Spesa"):
         data_formattata = data.strftime('%d/%m/%Y')
         
@@ -55,7 +55,6 @@ with st.expander("➕ Aggiungi Nuova Spesa"):
 # --- FILTRO E VISUALIZZAZIONE ---
 st.divider()
 if not df.empty:
-    # Specifichiamo che il GIORNO viene prima del mese per evitare l'errore Luglio/Febbraio
     df['Data'] = pd.to_datetime(df['Data'], dayfirst=True, errors='coerce')
     df = df.dropna(subset=['Data'])
     
@@ -63,7 +62,6 @@ if not df.empty:
     df['Anno'] = df['Data'].dt.strftime('%Y')
     df['Mese_Ita'] = df['Mese_Eng'].map(MESI_TRADUZIONE) + " " + df['Anno']
     
-    # Ordiniamo le opzioni per data decrescente
     elenco_mesi = df.sort_values(by='Data', ascending=False)['Mese_Ita'].unique()
     mese_scelto = st.selectbox("Seleziona il mese:", elenco_mesi)
     
@@ -74,14 +72,22 @@ if not df.empty:
     tab1, tab2, tab3 = st.tabs(["Elenco", "Grafico", "Gestione"])
 
     with tab1:
-        # Formattiamo la data per la visualizzazione in tabella
         df_tabella = df_filtrato.copy()
         df_tabella['Data'] = df_tabella['Data'].dt.strftime('%d/%m/%Y')
         st.dataframe(df_tabella[['Data', 'Categoria', 'Descrizione', 'Importo']], use_container_width=True)
 
     with tab2:
-        spese_per_cat = df_filtrato.groupby('Categoria')['Importo'].sum()
-        st.bar_chart(spese_per_cat)
+        # --- QUI C'È LA MODIFICA PER IL GRAFICO A TORTA ---
+        spese_per_cat = df_filtrato.groupby('Categoria')['Importo'].sum().reset_index()
+        
+        if not spese_per_cat.empty: # Aggiungiamo un controllo per evitare errori se non ci sono spese
+            fig = px.pie(spese_per_cat, values='Importo', names='Categoria', 
+                         title=f'Distribuzione Spese {mese_scelto}',
+                         hole=0.3)
+            st.plotly_chart(fig, use_container_width=True)
+        else:
+            st.info("Nessuna spesa per il mese selezionato per generare il grafico.")
+        # --- FINE MODIFICA GRAFICO A TORTA ---
 
     with tab3:
         st.write("Cancellazione:")
@@ -91,7 +97,6 @@ if not df.empty:
         if st.button("Elimina voce selezionata"):
             df_residuo = df.drop(indice)
             
-            # Fondamentale: Formatta le date prima di sovrascrivere il foglio Google
             if not df_residuo.empty:
                 df_residuo['Data'] = pd.to_datetime(df_residuo['Data'], dayfirst=True).dt.strftime('%d/%m/%Y')
             
